@@ -24,8 +24,7 @@ Steps:
 * Store the token in an environment variable for security:
 
 ```bash
-export GITHUB_TOKEN="ghp_xxx_your_token_here"
-
+export GITHUB_TOKEN="your_token_here"
 ```
 
 * Terraform GitHub provider reads this automatically.
