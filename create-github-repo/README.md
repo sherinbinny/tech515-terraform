@@ -25,7 +25,7 @@ Steps:
 
 ```bash
 export GITHUB_TOKEN="ghp_xxx_your_token_here"
-export GITHUB_TOKEN="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"
+
 ```
 
 * Terraform GitHub provider reads this automatically.
