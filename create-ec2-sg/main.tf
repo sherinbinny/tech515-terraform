@@ -2,7 +2,7 @@
 # cloud provider is AWS
 provider "aws" {
     # use Ireland region
-    region = "eu-west-1"
+    region = var.default_region
 }
 
 # which AMI ID ami-0c1c30571d2dae5c9 (for ubuntu 22.04 lts)
@@ -17,56 +17,64 @@ provider "aws" {
 resource "aws_instance" "app_instance" {
  
     # which AMI ID ami-0c1c30571d2dae5c9 (for ubuntu 22.04 lts)
-    ami = "ami-0c1c30571d2dae5c9"
+    ami = var.app_ami_id
  
     # what type of instance to launch
-    instance_type = "t3.micro"
+    instance_type = var.app_instance_type
 
     # SSH key to attach
     # This is immutable: once an EC2 is created, key_name cannot be changed via Terraform
     # Assigning key at creation ensures secure access
-    key_name      = "tech515-sherin-aws"  # ← attach your SSH keypair here
+    key_name      = var.ssh_key_name  # ← attach your SSH keypair here
 
     # Security groups to associate with this instance
     # Must reference IDs; we use the security group created already
-    vpc_security_group_ids = [aws_security_group.web-sg.id]
+    vpc_security_group_ids = [aws_security_group.app-sg.id]
 
     # please add a public ip to this instance
-    associate_public_ip_address = true
+    associate_public_ip_address = var.associate_public_ip
  
     # name the service
     tags = {
-        Name = "tech515-sherin-tf-second-instance"
+        Name = var.app_name
+        Environment = var.environment
     }
 }
 
 
-# Variable to store your current public IPv4 address
-# This is used to restrict SSH access (port 22) to your machine only
-# /32 ensures only your IP can access, which is a best practice for security
-
-variable "my_ip" {
-  default = "140.228.80.5/32"
-}
 
 
 # Fetch the default VPC for this AWS account/region
 # Needed because Security Groups must belong to a VPC
 # Using `data` allows Terraform to reference an existing resource instead of creating a new one
-
 data "aws_vpc" "default" {
   default = true
 }
 
 
+
+# Terraform uses this URL to detect the IP address
+# of the machine running `terraform apply`.
+# This eliminates the need to manually look up your IP.
+data "http" "my_ip" {
+  url = "https://checkip.amazonaws.com/"
+}
+
+# checkip returns something like "81.103.221.52\n"
+# chomp() removes the newline so Terraform doesn’t break.
+# We append /32 to restrict SSH access to exactly one IP.
+locals {
+  my_cidr = "${chomp(data.http.my_ip.response_body)}/32"
+}
+
 # Create a security group for the EC2 instance
 # A security group acts as a virtual firewall to control inbound and outbound traffic
 
-resource "aws_security_group" "web-sg" {
+resource "aws_security_group" "app-sg" {
   # Name of the security group
-  name = "tech515-sherin-tf-allow-port-22-3000-80"
+  name = var.sg_name
   # Description of the security group’s purpose
-  description = "Allow SSH from my IP, allow port 3000 & 80 from all"
+  description = var.sg_description
   # Associate this security group with the default VPC
   vpc_id = data.aws_vpc.default.id
 
@@ -78,7 +86,7 @@ resource "aws_security_group" "web-sg" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = [var.my_ip] # uses variable to allow easy IP updates
+    cidr_blocks = [local.my_cidr] # uses variable to allow easy IP updates
   }
 
 
@@ -89,7 +97,7 @@ resource "aws_security_group" "web-sg" {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # allows access from anywhere
+    cidr_blocks = [var.port_3000_cidrs] # allows access from anywhere
   }
 
   # Rule 3: HTTP (port 80) open to all
@@ -99,7 +107,7 @@ resource "aws_security_group" "web-sg" {
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # allows access from anywhere
+    cidr_blocks = [var.port_80_cidrs] # allows access from anywhere
   }
 
   # Allow all outbound traffic
@@ -109,6 +117,6 @@ resource "aws_security_group" "web-sg" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.egress_cidrs]
   }
 }
